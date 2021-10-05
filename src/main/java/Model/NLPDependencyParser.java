@@ -1,7 +1,10 @@
 package Model;
 
 import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import edu.stanford.nlp.ling.HasWord;
 import edu.stanford.nlp.ling.TaggedWord;
@@ -13,13 +16,15 @@ import edu.stanford.nlp.trees.GrammaticalStructure;
 public class NLPDependencyParser {
 	
 	private String text;
+	MaxentTagger tagger;
+	DependencyParser parser;
 
 	public NLPDependencyParser(String text) {
 		super();
 		this.text = text;
 	}
 
-	public void parseText() {
+	public NLPParseTreeResult parseText() {
 		/*
 
 		try{
@@ -63,6 +68,10 @@ public class NLPDependencyParser {
 	    
 		*/
 		
+		List<HasWord> sentenceList = new ArrayList<HasWord>();
+		List<TaggedWord> taggedWordList = new ArrayList<TaggedWord>();
+		GrammaticalStructure gs = null;
+		
 		String modelPath = DependencyParser.DEFAULT_MODEL;
 		String taggerPath = "edu/stanford/nlp/models/pos-tagger/english-left3words/english-left3words-distsim.tagger";
 		//String taggerPath = "models/english-left3words-distsim.tagger";
@@ -72,16 +81,20 @@ public class NLPDependencyParser {
 		MaxentTagger tagger;
 		tagger = new MaxentTagger(taggerPath);
 		DependencyParser parser = DependencyParser.loadFromModelFile(modelPath);
+		
 
 		DocumentPreprocessor tokenizer = new DocumentPreprocessor(new StringReader(this.text));
+		
 		for (List<HasWord> sentence : tokenizer) {
-			List<TaggedWord> tagged = tagger.tagSentence(sentence);
-			GrammaticalStructure gs = parser.predict(tagged);
+			taggedWordList = tagger.tagSentence(sentence);
+			gs = parser.predict(taggedWordList);
 
-			// Print typed dependencies
-			System.out.println("Here");
-			System.out.println(gs);
 		}
+		
+		NLPParseTreeResult npresult = new NLPParseTreeResult(taggedWordList, sentenceList, gs);
+		
+		
+		return npresult;
 		
 	}
 	

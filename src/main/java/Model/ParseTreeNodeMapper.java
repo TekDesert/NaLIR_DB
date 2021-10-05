@@ -13,7 +13,7 @@ import edu.stanford.nlp.process.DocumentPreprocessor;
 import edu.stanford.nlp.trees.GrammaticalStructure;
 import edu.stanford.nlp.trees.TypedDependency;
 
-public class ParseTreeNodeMapper {
+public class ParseTreeNodeMapper implements IParseTreeNodeMapper {
 
 
 	/**
@@ -24,7 +24,9 @@ public class ParseTreeNodeMapper {
 	/**
 	 * Root Node. Supposed to be "ROOT".
 	 */
-	//Node root;
+	Node root;
+	
+	Node[] nodes;
 	
 	/**
 	 * Empty constructor, only for testing.
@@ -36,6 +38,27 @@ public class ParseTreeNodeMapper {
 	 * Here we are omitting the information of dependency labels (tags).
 	 * @param text input text.
 	 */
+	public ParseTreeNodeMapper(List<TaggedWord> tagged, List<HasWord> sentence, GrammaticalStructure gs) {
+		// Reading the parsed sentence into ParseTreeNodeMapper
+				int N = tagged.size()+1;
+				nodes = new Node[N];
+				root = new Node(0, "ROOT", "ROOT");
+				nodes[0] = root;
+				
+				for (int i = 0; i < N-1; i++) {
+					nodes[i+1] = new Node(i+1, tagged.get(i).toString(), tagged.get(i).tag());
+				}
+				
+				for (TypedDependency typedDep : gs.allTypedDependencies()) {
+					int from = typedDep.gov().index();
+					int to   = typedDep.dep().index();
+
+					// String label = typedDep.reln().getShortName(); // omitting the label
+					nodes[to].parent = nodes[from];
+					nodes[from].children.add(nodes[to]);
+				}
+	}
+	
 	public ParseTreeNodeMapper(String text, NLPDependencyParser parser) {
 		// pre-processing the input text
 		DocumentPreprocessor tokenizer = new DocumentPreprocessor(new StringReader(text));
@@ -49,9 +72,9 @@ public class ParseTreeNodeMapper {
 		// dependency syntax parsing
 		GrammaticalStructure gs = parser.parser.predict(tagged);
 		
-		// Reading the parsed sentence into ParseTree
+		// Reading the parsed sentence into ParseTreeNodeMapper
 		int N = sentence.size()+1;
-		Node[] nodes = new Node[N];
+		nodes = new Node[N];
 		root = new Node(0, "ROOT", "ROOT");
 		nodes[0] = root;
 		for (int i = 0; i < N-1; i++) {
@@ -66,11 +89,15 @@ public class ParseTreeNodeMapper {
 			nodes[from].children.add(nodes[to]);
 		}
 	}
+	
+	public Node[] getParseNodes() {
+		return this.nodes;
+	}
 
-	public ParseTree(Node node) {
+	public ParseTreeNodeMapper(Node node) {
 		root = node.clone();
 	}
-	public ParseTree(ParseTree other) {
+	public ParseTreeNodeMapper(ParseTreeNodeMapper other) {
 		this(other.root);
 	}
 	
@@ -96,7 +123,7 @@ public class ParseTreeNodeMapper {
 	 */
 	private void removeMeaninglessNodes(Node curr) {
 		if (curr == null) { return; }
-		List<Node> currChildren = new ArrayList<>(curr.getChildren());
+		List<Node> currChildren = new ArrayList(curr.getChildren());
 		for (Node child : currChildren) {
 			removeMeaninglessNodes(child);
 		}
@@ -510,7 +537,7 @@ public class ParseTreeNodeMapper {
 
 	
 	@Override
-	public ParseTree mergeLNQN(){   
+	public ParseTreeNodeMapper mergeLNQN(){   
 		Node[] nodes = this.root.genNodesArray();
 		for (int i=0; i<this.size(); i++){
 			if (nodes[i].getInfo().getType().equals("LN") || nodes[i].getInfo().getType().equals("QN")){
@@ -520,7 +547,7 @@ public class ParseTreeNodeMapper {
 				removeNode(nodes[i]);
 			}
 		}
-		ParseTree tree = new ParseTree (root);
+		ParseTreeNodeMapper tree = new ParseTreeNodeMapper (root);
 		return tree;
 	}
 
@@ -532,13 +559,13 @@ public class ParseTreeNodeMapper {
 		}
 	}
 	
-	public ParseTree addON(){
+	public ParseTreeNodeMapper addON(){
 		Node root = this.root.clone();
 		Node on = new Node (0,"equals", "postag");
 		on.info = new NodeInfo ("ON", "=");
 		root.setChild(on);
 		on.setParent(root);	
-		ParseTree tree = new ParseTree(root);
+		ParseTreeNodeMapper tree = new ParseTreeNodeMapper(root);
 		return tree;
 	}
 
@@ -547,8 +574,8 @@ public class ParseTreeNodeMapper {
 	 * First order on higher validity score, second order on lower edits.
 	 */
 	@Override
-	public List<ParseTree> getAdjustedTrees() {
-		List<ParseTree> result = TreeAdjustor.getAdjustedTrees(this);
+	public List<ParseTreeNodeMapper> getAdjustedTrees() {
+		List<ParseTreeNodeMapper> result = TreeAdjustor.getAdjustedTrees(this);
 		Collections.sort(result, (t1, t2) -> {
 			if (t1.getScore() != t2.getScore()) {
 				return - t1.getScore() + t2.getScore();
@@ -563,10 +590,7 @@ public class ParseTreeNodeMapper {
 	 * Only for testing.
 	 * @return
 	 */
-	@Deprecated
-	public SQLQuery translateToSQL() {
-		return translateToSQL(null);
-	}
+
 	
 	@Override
 	public SQLQuery translateToSQL(SchemaGraph schema) {
@@ -590,7 +614,7 @@ public class ParseTreeNodeMapper {
 			return false;
 		if (getClass() != obj.getClass())
 			return false;
-		ParseTree other = (ParseTree) obj;
+		ParseTreeNodeMapper other = (ParseTreeNodeMapper) obj;
 		if (root == null) {
 			if (other.root != null)
 				return false;
@@ -611,9 +635,9 @@ public class ParseTreeNodeMapper {
 	 * Pre-order iterator
 	 * @author keping
 	 */
-	public class ParseTreeIterator implements Iterator<Node> {
+	public class ParseTreeNodeMapperIterator implements Iterator<Node> {
 		LinkedList<Node> stack = new LinkedList<>();
-		ParseTreeIterator() {
+		ParseTreeNodeMapperIterator() {
 			stack.push(root);
 		}
 		@Override
@@ -632,11 +656,11 @@ public class ParseTreeNodeMapper {
 	}
 	
 	/**
-	 * The default iterator in ParseTree returns the Nodes
+	 * The default iterator in ParseTreeNodeMapper returns the Nodes
 	 * using pre-order of the tree.
 	 */
 	@Override
-	public ParseTreeIterator iterator() { return new ParseTreeIterator(); }
+	public ParseTreeNodeMapperIterator iterator() { return new ParseTreeNodeMapperIterator(); }
 	
 	/**
 	 * Get the natural language sentence corresponding to this
@@ -688,5 +712,7 @@ public class ParseTreeNodeMapper {
 	public int getScore(){
 		return - SyntacticEvaluator.numberOfInvalidNodes(this);
 	}
+
+	
 	
 }
